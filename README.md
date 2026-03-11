@@ -284,3 +284,58 @@ python app.py
 ├── deploy.sh           # One-click deployment script
 └── requirements.txt    # Python dependencies
 ```
+
+## Advanced Features
+
+### Streaming Pipeline (`streaming.py`)
+LLM + TTS run in parallel. Gemini streams tokens → sentence splitter → TTS generates audio for first sentence while Gemini continues. Perceived latency: ~200ms instead of ~800ms.
+
+### Twilio Media Streams (`media_stream.py`)
+Bidirectional WebSocket for raw audio. Enables:
+- **Interrupt detection** — caller speaks while bot is talking → bot stops
+- **Voice Activity Detection** — detect silence for end-of-speech
+- **Sub-200ms latency** — no HTTP round-trips
+
+### TTS Audio Cache (`tts_cache.py`)
+Two-tier caching:
+- **Static phrases** — pre-generated at startup (welcome, error, goodbye = 0ms)
+- **Dynamic cache** — LRU 200 entries, generated once then cached
+
+### Post-Call Processing (`post_call.py`)
+- **AI Summary** — Gemini summarizes the call for CRM (subject, resolution, tags)
+- **Cloud Storage** — call recordings stored in GCS
+- **Slack alerts** — real-time notification on escalation
+- **SMS survey** — post-call satisfaction via Twilio SMS
+
+### Multi-Language (`multilang.py`)
+Auto-detect language from first sentence. Switch: Twilio STT + Gemini prompt + ElevenLabs voice.
+Supported: French, English, Spanish, German.
+
+## Complete File Structure
+
+```
+├── app.py              # Main server + Twilio webhooks
+├── streaming.py        # Gemini + TTS parallel streaming pipeline
+├── media_stream.py     # Twilio Media Streams (bidirectional WebSocket)
+├── sentiment.py        # Real-time frustration analysis
+├── zendesk.py          # Zendesk escalation (6 triggers)
+├── dlp_guard.py        # Cloud DLP data protection
+├── cache.py            # Response text cache (LRU)
+├── tts_cache.py        # Audio file cache (static + dynamic)
+├── analytics.py        # Call analytics from Firestore
+├── post_call.py        # Summary, recording, Slack, SMS survey
+├── multilang.py        # Multi-language auto-detection
+├── pubsub_events.py    # Async event publishing
+├── tracing.py          # OpenTelemetry → Cloud Trace
+├── datas.json          # Knowledge base
+├── docs/
+│   └── ARCHITECTURE.md # Full system architecture
+├── tests/
+│   └── test_callbot.py # 23 tests
+├── .github/
+│   └── workflows/
+│       └── deploy.yml  # CI/CD
+├── Dockerfile
+├── deploy.sh
+└── requirements.txt
+```
