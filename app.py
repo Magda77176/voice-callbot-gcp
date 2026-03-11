@@ -27,6 +27,10 @@ from google.cloud import firestore, logging as cloud_logging
 from google.cloud.logging.handlers import CloudLoggingHandler
 
 from zendesk import should_escalate, escalate_call, EscalationReason
+from sentiment import analyze_sentiment, get_frustration_trend
+from cache import response_cache
+from analytics import get_daily_stats, get_performance_summary, get_top_unanswered_questions
+from tracing import tracer
 
 # --- GCP Config ---
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "jarvis-v2-488311")
@@ -398,15 +402,34 @@ def handle_speech():
         "json_fields": {"call_sid": call_sid, "text": speech}
     })
     
+    # --- Sentiment analysis ---
+    sentiment_result = analyze_sentiment(speech, history)
+    
+    logger.info("sentiment", extra={
+        "json_fields": {
+            "call_sid": call_sid,
+            "sentiment": sentiment_result.sentiment.value,
+            "frustration_score": sentiment_result.frustration_score,
+            "trigger_words": sentiment_result.trigger_words,
+        }
+    })
+    
     # --- Check if escalation needed BEFORE responding ---
     doc = db.collection("callbot_sessions").document(call_sid).get()
     session_data = doc.to_dict() if doc.exists else {}
     order_num = session_data.get("order_number", "")
     stt_failures = session_data.get("stt_failures", 0)
     
-    needs_escalation, escalation_reason, priority = should_escalate(
-        speech, history, gemini_response="", stt_failures=stt_failures
-    )
+    # Force escalation if frustration is critical
+    if sentiment_result.frustration_score >= 8:
+        needs_escalation = True
+        escalation_reason = EscalationReason.SENSITIVE_TOPIC
+        priority = "urgent"
+    
+    if not (sentiment_result.frustration_score >= 8):
+        needs_escalation, escalation_reason, priority = should_escalate(
+            speech, history, gemini_response="", stt_failures=stt_failures
+        )
     
     if needs_escalation:
         import asyncio
@@ -432,6 +455,26 @@ def handle_speech():
         else:
             response.say(escalation_msg, language="fr-FR")
         response.say("Au revoir et bonne journée.", language="fr-FR")
+        return str(response)
+    
+    # --- Check cache first ---
+    cached = response_cache.get(speech)
+    if cached:
+        ai_response = cached.response
+        source = f"cache:{cached.source}"
+        add_to_session(call_sid, "assistant", ai_response)
+        
+        logger.info("response_sent", extra={
+            "json_fields": {"call_sid": call_sid, "source": source, "response": ai_response[:100]}
+        })
+        
+        gather = Gather(input="speech", action="/handle-speech", method="POST", language="fr-FR", timeout=5)
+        audio = speak(ai_response)
+        if audio:
+            gather.play(f"/static/{audio}")
+        else:
+            gather.say(ai_response, language="fr-FR")
+        response.append(gather)
         return str(response)
     
     # --- Normal response strategy: KB → intent → Gemini ---
@@ -468,6 +511,9 @@ def handle_speech():
                 loop.close()
                 ai_response = escalation_msg
                 source = "escalation"
+    
+    # Cache the response for future calls
+    response_cache.put(speech, ai_response, source)
     
     # Log response
     add_to_session(call_sid, "assistant", ai_response)
@@ -533,6 +579,39 @@ def stats():
         "escalated_sessions": escalated,
         "escalation_rate": f"{(escalated/total*100):.1f}%" if total > 0 else "0%",
     })
+
+
+@app.route("/analytics")
+def analytics_endpoint():
+    """Daily analytics dashboard."""
+    date = request.args.get("date")
+    return jsonify(get_daily_stats(date))
+
+
+@app.route("/analytics/performance")
+def performance_endpoint():
+    """30-day performance summary."""
+    return jsonify(get_performance_summary())
+
+
+@app.route("/analytics/unanswered")
+def unanswered_endpoint():
+    """Top questions the bot couldn't answer — candidates for knowledge base."""
+    limit = int(request.args.get("limit", 10))
+    return jsonify(get_top_unanswered_questions(limit))
+
+
+@app.route("/cache/stats")
+def cache_stats():
+    """Response cache performance."""
+    return jsonify(response_cache.stats())
+
+
+@app.route("/cache/clear", methods=["POST"])
+def cache_clear():
+    """Flush the response cache."""
+    response_cache.clear()
+    return jsonify({"status": "cleared"})
 
 
 @app.route("/static/<filename>")
