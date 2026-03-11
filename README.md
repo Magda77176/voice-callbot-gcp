@@ -12,6 +12,12 @@ Production voice callbot migrated from OpenAI to Google Cloud Platform. Demonstr
 | **Logging** | Python logging | Cloud Logging (structured JSON) |
 | **Hosting** | VPS + Flask | Cloud Run (serverless, auto-scale) |
 | **Secrets** | .env file | Secret Manager |
+| **Escalation** | None (dead end) | Zendesk ticket + full transcript |
+| **Sentiment** | None | Real-time frustration scoring |
+| **Caching** | None | LRU cache (500 entries, 1h TTL) |
+| **Analytics** | None | Firestore aggregations + API |
+| **Tracing** | None | OpenTelemetry → Cloud Trace |
+| **Tests** | None | 23 tests (pytest) |
 | **Cost** | ~$0.15/1K calls (OpenAI) | ~$0 (Gemini free tier) |
 
 ## Architecture
@@ -212,6 +218,46 @@ gcloud run deploy voice-callbot \
 | GET | `/health` | Health check |
 | GET | `/stats` | Call statistics from Firestore |
 
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/voice` | Twilio initial webhook |
+| POST | `/handle-order` | Process DTMF order number |
+| POST | `/handle-speech` | Process speech + sentiment + escalation |
+| GET | `/health` | Health check (model, project) |
+| GET | `/stats` | Session stats + escalation rate |
+| GET | `/analytics` | Daily call analytics (add `?date=YYYY-MM-DD`) |
+| GET | `/analytics/performance` | 30-day performance summary |
+| GET | `/analytics/unanswered` | Top questions for KB improvement |
+| GET | `/cache/stats` | Cache hit rate and performance |
+| POST | `/cache/clear` | Flush response cache |
+
+## Response Pipeline
+
+```
+User speaks
+  │
+  ├─ Sentiment analysis (instant, rule-based)
+  │    └─ Frustration >= 8? → URGENT escalation to Zendesk
+  │
+  ├─ Escalation check (customer request, sensitive topic, max turns)
+  │    └─ Escalate? → Create Zendesk ticket → End call gracefully
+  │
+  ├─ Cache lookup (LRU, case-insensitive)
+  │    └─ Cache hit? → Return cached response (skip LLM)
+  │
+  ├─ Knowledge base fuzzy match ($0)
+  │    └─ Match? → Return KB answer
+  │
+  ├─ Intent detection (delivery/return keywords, $0)
+  │    └─ Delivery? → Fetch order API
+  │
+  └─ Vertex AI Gemini (free tier)
+       └─ Post-response confidence check → maybe escalate
+       └─ Cache response for future calls
+```
+
 ## Local Development
 
 ```bash
@@ -227,7 +273,13 @@ python app.py
 ```
 ├── app.py              # Main server (Flask + Vertex AI + Firestore)
 ├── zendesk.py          # Zendesk escalation (detection + ticket creation)
+├── sentiment.py        # Real-time frustration analysis (rules + Gemini)
+├── analytics.py        # Call analytics and reporting from Firestore
+├── cache.py            # LRU response cache (reduce Gemini calls)
+├── tracing.py          # OpenTelemetry → Cloud Trace
 ├── datas.json          # Knowledge base (Q&A pairs)
+├── tests/
+│   └── test_callbot.py # 23 tests (sentiment, escalation, cache)
 ├── Dockerfile          # Cloud Run container
 ├── deploy.sh           # One-click deployment script
 └── requirements.txt    # Python dependencies
