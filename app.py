@@ -31,6 +31,8 @@ from sentiment import analyze_sentiment, get_frustration_trend
 from cache import response_cache
 from analytics import get_daily_stats, get_performance_summary, get_top_unanswered_questions
 from tracing import tracer
+from dlp_guard import scan_and_sanitize
+from pubsub_events import emit_call_started, emit_call_turn, emit_call_escalated, emit_call_ended
 
 # --- GCP Config ---
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "jarvis-v2-488311")
@@ -311,6 +313,7 @@ def voice():
     call_sid = request.values.get("CallSid", "unknown")
     
     logger.info("call_started", extra={"json_fields": {"call_sid": call_sid}})
+    emit_call_started(call_sid, request.values.get("Caller", ""))
     
     gather = Gather(
         input="dtmf",
@@ -447,6 +450,7 @@ def handle_speech():
                 "zendesk_success": success,
             }
         })
+        emit_call_escalated(call_sid, escalation_reason.value, priority)
         
         # Speak the escalation message and hang up
         audio = speak(escalation_msg)
@@ -512,8 +516,21 @@ def handle_speech():
                 ai_response = escalation_msg
                 source = "escalation"
     
+    # DLP scan — prevent sensitive data leaks in voice responses
+    ai_response = scan_and_sanitize(ai_response)
+    
     # Cache the response for future calls
     response_cache.put(speech, ai_response, source)
+    
+    # Pub/Sub event — async processing (analytics, CRM, notifications)
+    emit_call_turn(
+        call_sid=call_sid,
+        user_text=speech,
+        bot_response=ai_response,
+        source=source,
+        sentiment=sentiment_result.sentiment.value,
+        frustration_score=sentiment_result.frustration_score,
+    )
     
     # Log response
     add_to_session(call_sid, "assistant", ai_response)
