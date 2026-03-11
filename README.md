@@ -307,6 +307,16 @@ Two-tier caching:
 - **Slack alerts** — real-time notification on escalation
 - **SMS survey** — post-call satisfaction via Twilio SMS
 
+### Feedback Loop (`feedback_loop.py`)
+Closed-loop learning from Zendesk tickets:
+1. Fetch resolved callbot tickets daily (Cloud Scheduler)
+2. Gemini classifies: can the bot handle this next time?
+3. Auto-actions: add to KB / suggest prompt fix / flag for review
+4. BigQuery trend analysis (escalation rate over time)
+5. Weekly report (Slack/email)
+
+Result: knowledge base grows automatically, escalation rate drops week over week.
+
 ### Multi-Language (`multilang.py`)
 Auto-detect language from first sentence. Switch: Twilio STT + Gemini prompt + ElevenLabs voice.
 Supported: French, English, Spanish, German.
@@ -325,6 +335,7 @@ Supported: French, English, Spanish, German.
 ├── analytics.py        # Call analytics from Firestore
 ├── post_call.py        # Summary, recording, Slack, SMS survey
 ├── multilang.py        # Multi-language auto-detection
+├── feedback_loop.py    # Zendesk → Gemini → KB auto-update (closed loop)
 ├── pubsub_events.py    # Async event publishing
 ├── tracing.py          # OpenTelemetry → Cloud Trace
 ├── datas.json          # Knowledge base

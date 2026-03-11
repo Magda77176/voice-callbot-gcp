@@ -216,3 +216,30 @@ jsonPayload.call_sid="CA1234567890"
 1. Consulter `/analytics/unanswered` → questions fréquentes non résolues
 2. Ajouter dans `datas.json`
 3. Push → CI/CD redéploie → cache se vide → prochains appels utilisent le KB
+
+---
+
+## Feedback Loop — Apprentissage continu
+
+```
+Zendesk (tickets résolus tag "callbot")
+    │ Cloud Scheduler (daily)
+    ▼
+Feedback Processor (feedback_loop.py)
+    │
+    ├─ Gemini classifie : le bot peut-il gérer ça ?
+    │    ├── add_to_kb      → enrichit datas.json automatiquement
+    │    ├── improve_prompt  → suggestion stockée (Firestore) → revue hebdo
+    │    ├── flag_review     → cas complexe → décision humaine
+    │    └── no_action       → cas isolé, pas de pattern
+    │
+    ├─ BigQuery → trend analysis (taux escalade par semaine)
+    └─ Rapport hebdo → Slack
+```
+
+**Résultat :** Le bot devient plus intelligent chaque semaine. Le taux d'escalade baisse en continu.
+
+**Endpoints :**
+- `POST /feedback/process` → déclenché quotidiennement par Cloud Scheduler
+- `GET /feedback/report` → résumé hebdomadaire
+- `GET /feedback/stats` → taille KB + entrées auto-ajoutées

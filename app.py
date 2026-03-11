@@ -34,6 +34,7 @@ from tracing import tracer
 from dlp_guard import scan_and_sanitize
 from pubsub_events import emit_call_started, emit_call_turn, emit_call_escalated, emit_call_ended
 from streaming import stream_response_to_twilio
+from feedback_loop import create_feedback_endpoint
 
 # --- GCP Config ---
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "jarvis-v2-488311")
@@ -743,6 +744,10 @@ def cache_clear():
 @app.route("/static/<filename>")
 def serve_static(filename):
     return send_from_directory("static", filename)
+
+
+# Register feedback loop endpoints
+create_feedback_endpoint(app)
 
 
 if __name__ == "__main__":
