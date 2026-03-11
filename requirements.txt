@@ -6,3 +6,4 @@ google-cloud-aiplatform>=1.38
 google-cloud-firestore>=2.14
 google-cloud-logging>=3.8
 requests>=2.31
+httpx>=0.26.0

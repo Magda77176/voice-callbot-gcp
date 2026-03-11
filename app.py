@@ -26,6 +26,8 @@ from vertexai.generative_models import GenerativeModel, SafetySetting, HarmCateg
 from google.cloud import firestore, logging as cloud_logging
 from google.cloud.logging.handlers import CloudLoggingHandler
 
+from zendesk import should_escalate, escalate_call, EscalationReason
+
 # --- GCP Config ---
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "jarvis-v2-488311")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
@@ -374,6 +376,14 @@ def handle_speech():
     call_sid = request.values.get("CallSid", "unknown")
     
     if not speech:
+        # Track STT failures for escalation logic
+        call_sid_tmp = request.values.get("CallSid", "unknown")
+        doc_tmp = db.collection("callbot_sessions").document(call_sid_tmp).get()
+        failures = (doc_tmp.to_dict() or {}).get("stt_failures", 0) + 1 if doc_tmp.exists else 1
+        db.collection("callbot_sessions").document(call_sid_tmp).set(
+            {"stt_failures": failures}, merge=True
+        )
+        
         error = speak("Je n'ai pas compris. Pouvez-vous répéter ?")
         if error:
             response.play(f"/static/{error}")
@@ -382,12 +392,49 @@ def handle_speech():
     
     # Log user input
     history = add_to_session(call_sid, "user", speech)
+    caller_phone = request.values.get("Caller", "")
     
     logger.info("speech_received", extra={
         "json_fields": {"call_sid": call_sid, "text": speech}
     })
     
-    # Response strategy: KB → intent → Gemini
+    # --- Check if escalation needed BEFORE responding ---
+    doc = db.collection("callbot_sessions").document(call_sid).get()
+    session_data = doc.to_dict() if doc.exists else {}
+    order_num = session_data.get("order_number", "")
+    stt_failures = session_data.get("stt_failures", 0)
+    
+    needs_escalation, escalation_reason, priority = should_escalate(
+        speech, history, gemini_response="", stt_failures=stt_failures
+    )
+    
+    if needs_escalation:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        success, escalation_msg = loop.run_until_complete(
+            escalate_call(call_sid, caller_phone, order_num, escalation_reason, history, priority)
+        )
+        loop.close()
+        
+        logger.info("escalation_triggered", extra={
+            "json_fields": {
+                "call_sid": call_sid,
+                "reason": escalation_reason.value,
+                "priority": priority,
+                "zendesk_success": success,
+            }
+        })
+        
+        # Speak the escalation message and hang up
+        audio = speak(escalation_msg)
+        if audio:
+            response.play(f"/static/{audio}")
+        else:
+            response.say(escalation_msg, language="fr-FR")
+        response.say("Au revoir et bonne journée.", language="fr-FR")
+        return str(response)
+    
+    # --- Normal response strategy: KB → intent → Gemini ---
     kb_answer = find_best_match(speech)
     
     if kb_answer:
@@ -397,8 +444,6 @@ def handle_speech():
         intent = detect_intent(speech)
         
         if intent == "delivery_status":
-            doc = db.collection("callbot_sessions").document(call_sid).get()
-            order_num = doc.to_dict().get("order_number", "") if doc.exists else ""
             if order_num:
                 order = get_order_details(order_num)
                 ai_response = format_order_status(order) if order else "Je ne trouve pas votre commande."
@@ -409,6 +454,20 @@ def handle_speech():
             # Fallback to Vertex AI Gemini
             ai_response = get_gemini_response(speech, history)
             source = "gemini"
+            
+            # Check if Gemini response itself triggers escalation
+            needs_esc2, reason2, prio2 = should_escalate(
+                speech, history, gemini_response=ai_response, stt_failures=stt_failures
+            )
+            if needs_esc2:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                success, escalation_msg = loop.run_until_complete(
+                    escalate_call(call_sid, caller_phone, order_num, reason2, history, prio2)
+                )
+                loop.close()
+                ai_response = escalation_msg
+                source = "escalation"
     
     # Log response
     add_to_session(call_sid, "assistant", ai_response)
@@ -451,23 +510,28 @@ def health():
 @app.route("/stats")
 def stats():
     """Call statistics from Firestore."""
-    sessions = db.collection("callbot_sessions").order_by(
+    sessions_ref = db.collection("callbot_sessions").order_by(
         "updated_at", direction=firestore.Query.DESCENDING
     ).limit(100).stream()
     
     total = 0
     today = 0
+    escalated = 0
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     
-    for s in sessions:
+    for s in sessions_ref:
         total += 1
         data = s.to_dict()
         if data.get("updated_at", "").startswith(today_str):
             today += 1
+        if data.get("escalated"):
+            escalated += 1
     
     return jsonify({
         "total_sessions": total,
         "today_sessions": today,
+        "escalated_sessions": escalated,
+        "escalation_rate": f"{(escalated/total*100):.1f}%" if total > 0 else "0%",
     })
 
 

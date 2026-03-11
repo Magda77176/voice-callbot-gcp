@@ -54,11 +54,63 @@ Production voice callbot migrated from OpenAI to Google Cloud Platform. Demonstr
 5. Status spoken via ElevenLabs TTS
 6. Free-form Q&A loop → /handle-speech
    a. Speech-to-Text (Twilio built-in)
-   b. Knowledge base fuzzy match ($0)
-   c. Intent detection (delivery/return) ($0)
-   d. Vertex AI Gemini fallback (free tier)
-   e. Text-to-Speech (ElevenLabs)
-   f. Loop until hangup
+   b. ⚡ Escalation check (before responding)
+   c. Knowledge base fuzzy match ($0)
+   d. Intent detection (delivery/return) ($0)
+   e. Vertex AI Gemini fallback (free tier)
+   f. ⚡ Post-response escalation check
+   g. Text-to-Speech (ElevenLabs)
+   h. Loop until hangup or escalation
+```
+
+## Zendesk Escalation
+
+The callbot automatically detects when a human agent is needed and creates a Zendesk ticket with full conversation context.
+
+### Escalation Triggers
+
+| Trigger | Priority | Example |
+|---------|----------|---------|
+| Customer asks for human | High | "Je veux parler à quelqu'un" |
+| Sensitive topic | High | "remboursement", "réclamation", "avocat" |
+| Max turns reached (8+) | Normal | Long unresolved conversation |
+| Repeated STT failures (3+) | Normal | Bad audio quality |
+| Low confidence (2+ uncertain) | Normal | Bot says "je ne sais pas" twice |
+
+### What happens on escalation
+
+```
+Escalation detected
+  → Summarize conversation (no LLM, just formatting)
+  → Create Zendesk ticket with:
+     - Full transcript
+     - Order number
+     - Caller phone
+     - Escalation reason
+     - Priority level
+  → Tell caller: "Je transfère votre demande. Votre numéro de dossier est le XXX."
+  → End call gracefully
+```
+
+### Zendesk Ticket Format
+
+```
+Subject: [Callbot] Escalade — Le client a demandé à parler à un conseiller
+Priority: High
+Tags: callbot, escalation, reason_customer_request
+
+Body:
+📦 Numéro de commande : 100456789
+
+📞 Transcription de l'appel :
+----------------------------------------
+🧑 Client: Où est ma commande ?
+🤖 Bot: Votre commande est en cours de livraison.
+🧑 Client: Ça fait 2 semaines ! Je veux parler à quelqu'un.
+----------------------------------------
+
+📋 Messages client : 2
+💬 Dernier message : Je veux parler à quelqu'un.
 ```
 
 ## Response Strategy (cost optimization)
@@ -85,6 +137,7 @@ User speaks
 | **Firestore** | Session persistence | 1 GiB storage free |
 | **Cloud Logging** | Structured logs + monitoring | 50 GiB/month free |
 | **Secret Manager** | API keys storage | 6 active versions free |
+| **Zendesk API** | Ticket creation on escalation | Included in Zendesk plan |
 
 ## Structured Logging
 
@@ -173,6 +226,7 @@ python app.py
 
 ```
 ├── app.py              # Main server (Flask + Vertex AI + Firestore)
+├── zendesk.py          # Zendesk escalation (detection + ticket creation)
 ├── datas.json          # Knowledge base (Q&A pairs)
 ├── Dockerfile          # Cloud Run container
 ├── deploy.sh           # One-click deployment script
