@@ -1,0 +1,34 @@
+[
+  {
+    "question": "Quels sont vos délais de livraison ?",
+    "answer": "La livraison standard prend entre 3 et 5 jours ouvrés. La livraison express est disponible en 24 à 48 heures."
+  },
+  {
+    "question": "Comment retourner un produit ?",
+    "answer": "Vous disposez de 14 jours pour retourner un produit. Connectez-vous à votre espace client pour générer une étiquette de retour."
+  },
+  {
+    "question": "Quels moyens de paiement acceptez-vous ?",
+    "answer": "Nous acceptons la carte bancaire, PayPal et le paiement en 3 fois sans frais."
+  },
+  {
+    "question": "Comment modifier ma commande ?",
+    "answer": "Vous pouvez modifier votre commande tant qu'elle n'a pas été expédiée. Contactez notre service client ou rendez-vous dans votre espace client."
+  },
+  {
+    "question": "Avez-vous un programme de fidélité ?",
+    "answer": "Oui, chaque achat vous rapporte des points fidélité convertibles en bons de réduction."
+  },
+  {
+    "question": "Comment contacter un conseiller ?",
+    "answer": "Nos conseillers sont disponibles par téléphone du lundi au vendredi de 9h à 18h, ou par email à tout moment."
+  },
+  {
+    "question": "Livrez-vous à l'international ?",
+    "answer": "Oui, nous livrons dans toute l'Union Européenne. Les frais et délais varient selon le pays."
+  },
+  {
+    "question": "Que faire si mon colis est endommagé ?",
+    "answer": "Refusez le colis si possible, ou contactez-nous dans les 48 heures avec des photos du dommage. Nous vous enverrons un remplacement."
+  }
+]
