@@ -171,7 +171,7 @@ Daily (Cloud Scheduler):
   1. Fetch Zendesk tickets resolved by humans (tag: callbot)
   2. Gemini classifies each: "Can the bot handle this next time?"
   3. Actions:
-     - add_to_kb (confidence > 0.7) → auto-enrich datas.json
+     - add_to_kb (confidence > 0.7) → auto-enrich data.json
      - improve_prompt → suggestion stored, reviewed weekly
      - flag_review → edge case, human decision needed
   4. BigQuery stores all events → track escalation rate over time
@@ -276,7 +276,7 @@ pytest tests/ -v
 ├── multilang.py        # Multi-language auto-detection
 ├── pubsub_events.py    # Async Pub/Sub events
 ├── tracing.py          # OpenTelemetry → Cloud Trace
-├── datas.json          # Knowledge base
+├── data.json          # Knowledge base
 ├── docs/
 │   └── ARCHITECTURE.md # Detailed system architecture
 ├── tests/

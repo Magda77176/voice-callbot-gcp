@@ -1,4 +1,4 @@
-name: CI/CD — Voice Callbot GCP
+name: Deploy — Voice Callbot GCP
 
 on:
   push:
@@ -25,8 +25,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flask twilio elevenlabs httpx
-          pip install opentelemetry-api opentelemetry-sdk
+          pip install -r requirements.txt
           pip install pytest
 
       - name: Run tests

@@ -82,7 +82,7 @@ elevenlabs_client = ElevenLabs(api_key=ELEVEN_LABS_API_KEY)
 
 # Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(32).hex())
 
 
 # ============================================================
@@ -90,11 +90,11 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
 # ============================================================
 
 try:
-    with open("datas.json", "r") as f:
+    with open("data.json", "r") as f:
         knowledge_base = json.load(f)
 except FileNotFoundError:
     knowledge_base = []
-    logger.warning("Knowledge base 'datas.json' not found")
+    logger.warning("Knowledge base 'data.json' not found")
 
 
 def normalize_text(text: str) -> str:
@@ -342,11 +342,11 @@ def detect_intent(text: str) -> str:
 
 def get_order_details(order_number: str) -> dict | None:
     """Fetch order from e-commerce API."""
-    import requests
+    import httpx
     try:
         url = f"https://{ECOMMERCE_SUBDOMAIN}.com/api/orders/{order_number}"
         headers = {"Authorization": f"Bearer {ECOMMERCE_API_TOKEN}"}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = httpx.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         return None

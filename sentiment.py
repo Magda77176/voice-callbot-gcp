@@ -11,8 +11,6 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-import vertexai
-from vertexai.generative_models import GenerativeModel
 
 logger = logging.getLogger("callbot")
 
@@ -111,6 +109,7 @@ async def gemini_sentiment(text: str, context: str = "") -> SentimentResult:
     Nuanced sentiment analysis via Vertex AI.
     Catches sarcasm, passive aggression, and escalating frustration.
     """
+    from vertexai.generative_models import GenerativeModel
     model = GenerativeModel(MODEL_NAME)
     prompt = SENTIMENT_PROMPT.format(text=text, context=context)
 

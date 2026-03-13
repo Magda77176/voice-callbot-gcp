@@ -12,7 +12,7 @@ Pipeline:
   2. Extract: original question + human resolution
   3. Gemini classifies: can the bot handle this next time?
   4. Auto-actions:
-     a. Add to knowledge base (datas.json) → no more escalation for this
+     a. Add to knowledge base (data.json) → no more escalation for this
      b. Improve system prompt → better handling
      c. Flag for review → edge case, needs human decision
   5. Store in BigQuery for trend analysis
@@ -54,7 +54,7 @@ ZENDESK_EMAIL = os.getenv("ZENDESK_EMAIL")
 ZENDESK_API_TOKEN = os.getenv("ZENDESK_API_TOKEN")
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "jarvis-v2-488311")
 MODEL_NAME = os.getenv("VERTEX_MODEL", "gemini-2.0-flash-001")
-KB_PATH = os.getenv("KB_PATH", "datas.json")
+KB_PATH = os.getenv("KB_PATH", "data.json")
 
 db = firestore.Client(project=PROJECT_ID)
 
@@ -197,7 +197,7 @@ def classify_ticket(original_question: str, resolution: str, tags: list[str]) ->
 
 def update_knowledge_base(kb_entry: dict) -> bool:
     """
-    Add a new Q&A to the knowledge base (datas.json).
+    Add a new Q&A to the knowledge base (data.json).
     Next time a client asks this question → instant answer from KB, no LLM needed.
     """
     try:
