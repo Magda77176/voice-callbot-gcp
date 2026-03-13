@@ -1,0 +1,48 @@
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: jarvis-v2-488311
+  REGION: us-central1
+  SERVICE_NAME: voice-callbot
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --source . \
+            --region $REGION \
+            --project $PROJECT_ID \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --set-env-vars "GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,VERTEX_MODEL=gemini-2.0-flash-001,PUBSUB_TOPIC=callbot-events"
+
+      - name: Smoke test
+        run: |
+          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+            --region $REGION --project $PROJECT_ID \
+            --format='value(status.url)')
+          echo "Testing $SERVICE_URL..."
+          HEALTH=$(curl -s "$SERVICE_URL/health")
+          echo "Health: $HEALTH"
+          echo "$HEALTH" | grep -q "healthy" || exit 1
+          echo "Smoke tests passed"
